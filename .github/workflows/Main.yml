@@ -1,25 +1,25 @@
 name: PDF KI Archivierung
 on:
-  workflow_dispatch: # Das ist dein Button in der App!
+  workflow_dispatch:
   schedule:
-    - cron: '0 22 * * *' # Automatischer Lauf jeden Abend um 22 Uhr
+    - cron: '0 22 * * *'
 
 jobs:
-  run-archive:
+  archive:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12' # Modernes Python für 2026
       
       - name: Install Libraries
         run: |
-          pip install google-generativeai pypdf google-api-python-client google-auth
+          pip install google-genai pypdf google-api-python-client google-auth
 
       - name: Run Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-        run: python Script.py
+        run: python Script.py # Achte auf das große 'S' falls nötig!
