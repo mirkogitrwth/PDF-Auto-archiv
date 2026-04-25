@@ -3,13 +3,12 @@ import json
 import time
 import io
 import pypdf
-from google import genai # Modernste Version für 2026
+from google import genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
-# --- DEINE KONFIGURATION ---
-# (Bitte entferne das ?hl=DE falls noch vorhanden)
+# --- KONFIGURATION ---
 SCAN_FOLDER_ID = '1h3f-WZhYQFTKO4lAWYRiFZ6OCwXF7xkr' 
 ARCHIVE_BASE_ID = '1XKGNecC9kyW9jtGZKJ_lSenxpYOBNMWG'
 
@@ -19,20 +18,18 @@ creds = service_account.Credentials.from_service_account_info(
     creds_info, scopes=['https://www.googleapis.com/auth/drive'])
 drive_service = build('drive', 'v3', credentials=creds)
 
-# Neuer Client für Gemini 2.0 Flash
+# API Client
 client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
 
 def get_or_create_folder(name, parent_id):
-    """Findet einen Ordner im Archiv oder erstellt ihn."""
     query = f"name = '{name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     response = drive_service.files().list(q=query).execute()
     files = response.get('files', [])
     if files:
         return files[0]['id']
-    else:
-        file_metadata = {'name': name, 'parents': [parent_id], 'mimeType': 'application/vnd.google-apps.folder'}
-        folder = drive_service.files().create(body=file_metadata, fields='id').execute()
-        return folder.get('id')
+    file_metadata = {'name': name, 'parents': [parent_id], 'mimeType': 'application/vnd.google-apps.folder'}
+    folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+    return folder.get('id')
 
 def process_files():
     query = f"'{SCAN_FOLDER_ID}' in parents and mimeType = 'application/pdf' and trashed = false"
@@ -48,7 +45,6 @@ def process_files():
         filename = file_info['name']
         print(f"\n📂 Verarbeite: {filename}...")
 
-        # 1. Download
         request = drive_service.files().get_media(fileId=file_id)
         file_stream = io.BytesIO()
         downloader = MediaIoBaseDownload(file_stream, request)
@@ -60,13 +56,13 @@ def process_files():
         with open("temp.pdf", "wb") as f:
             f.write(file_stream.getbuffer())
         
-        # 2. KI-Upload & Analyse
-        sample_file = client.files.upload(path="temp.pdf")
+        # --- KORREKTUR HIER: 'file' statt 'path' ---
+        sample_file = client.files.upload(file="temp.pdf")
+        
         while sample_file.state.name == "PROCESSING":
             time.sleep(2)
             sample_file = client.files.get(name=sample_file.name)
 
-        # DEIN AKTUALISIERTER PROMPT
         prompt = """
         Du bist ein professioneller Archivar. Sieh dir diese gescannten Seiten an.
         Es können mehrere verschiedene Dokumente in dieser einen PDF sein.
@@ -84,20 +80,19 @@ def process_files():
         Kategorien: Gehalt, Versicherung, Steuern, Wohnung, Gesundheit, Sonstiges.
         """
         
+        # --- KORREKTUR HIER: Modellname ohne 'models/' Präfix ---
         response = client.models.generate_content(
             model='gemini-2.0-flash', 
             contents=[sample_file, prompt]
         )
 
         try:
-            # KI-Antwort säubern und laden
             clean_json = response.text.replace('```json', '').replace('```', '').strip()
             instructions = json.loads(clean_json)
         except Exception as e:
-            print(f"❌ KI-Antwort konnte nicht gelesen werden: {e}")
+            print(f"❌ Fehler beim Lesen der KI-Antwort: {e}")
             continue
 
-        # 3. Splitting & Upload
         reader = pypdf.PdfReader("temp.pdf")
         for doc in instructions:
             writer = pypdf.PdfWriter()
@@ -121,11 +116,10 @@ def process_files():
             print(f"   ✅ Archiviert: {doc['folder']}/{doc['filename']}.pdf")
             os.remove(split_filename)
 
-        # 4. Aufräumen
         drive_service.files().delete(fileId=file_id).execute()
-        print(f"🏁 {filename} fertig und gelöscht.")
+        print(f"🏁 {filename} erledigt.")
         os.remove("temp.pdf")
-        time.sleep(10) # Kleine Pause für die API
+        time.sleep(15)
 
 if __name__ == "__main__":
     process_files()
