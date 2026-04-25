@@ -70,12 +70,22 @@ def process_files():
             time.sleep(2)
             sample_file = genai.get_file(sample_file.name)
 
-        prompt = """
-        Du bist ein professioneller Archivar. Sieh dir diese gescannten Seiten an.
-        Antworte NUR mit einem JSON-Array:
-        [ {"filename": "YYYY-MM_Typ_Absender", "folder": "Kategorie", "pages": [0]} ]
-        Kategorien: Gehalt, Versicherung, Steuern, Wohnung, Gesundheit, Sonstiges.
-        """
+            prompt = """
+            Du bist ein professioneller Archivar. Sieh dir diese gescannten Seiten an.
+            Es können mehrere verschiedene Dokumente in dieser einen PDF sein.
+
+            1. Identifiziere jedes einzelne Dokument.
+            2. Bestimme den Zeitraum (YYYY-MM), den Typ und den Absender.
+            3. Gib mir die Seitenzahlen an (die erste Seite ist 0).
+
+            Antworte NUR mit einem JSON-Array:
+            [
+              {"filename": "2024-03_Rechnung_Telekom", "folder": "Rechnungen", "pages": [0]},
+              {"filename": "2024-01_Versicherungsschein_HUK", "folder": "Versicherung", "pages": [1, 2]}
+            ]
+
+            Kategorien: Gehalt, Versicherung, Steuern, Wohnung, Gesundheit, Sonstiges.
+            """
         
         response = model.generate_content([sample_file, prompt])
         genai.delete_file(sample_file.name) # KI-Cache aufräumen
