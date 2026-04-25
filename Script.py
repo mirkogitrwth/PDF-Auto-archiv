@@ -10,8 +10,8 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 # --- KONFIGURATION ---
 # Die IDs findest du in der Browser-URL deines Drive-Ordners
-SCAN_FOLDER_ID = '1h3f-WZhYQFTKO4lAWYRiFZ6OCwXF7xkr?hl=DE' 
-ARCHIVE_BASE_ID = '1XKGNecC9kyW9jtGZKJ_lSenxpYOBNMWG?hl=DE'
+SCAN_FOLDER_ID = '1h3f-WZhYQFTKO4lAWYRiFZ6OCwXF7xkr?hl' 
+ARCHIVE_BASE_ID = '1XKGNecC9kyW9jtGZKJ_lSenxpYOBNMWG?hl'
 
 # --- SETUP ---
 # Authentifizierung über GitHub Secrets
