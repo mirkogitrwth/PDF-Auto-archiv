@@ -18,7 +18,6 @@ creds = service_account.Credentials.from_service_account_info(
     creds_info, scopes=['https://www.googleapis.com/auth/drive'])
 drive_service = build('drive', 'v3', credentials=creds)
 
-# API Client
 client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
 
 def get_or_create_folder(name, parent_id):
@@ -32,9 +31,10 @@ def get_or_create_folder(name, parent_id):
     return folder.get('id')
 
 def process_files():
+    # Wir filtern .done Dateien aus, falls welche existieren
     query = f"'{SCAN_FOLDER_ID}' in parents and mimeType = 'application/pdf' and trashed = false"
     results = drive_service.files().list(q=query).execute()
-    files = results.get('files', [])
+    files = [f for f in results.get('files', []) if not f['name'].endswith('.done')]
 
     if not files:
         print("☕️ Keine neuen PDFs gefunden.")
@@ -56,9 +56,8 @@ def process_files():
         with open("temp.pdf", "wb") as f:
             f.write(file_stream.getbuffer())
         
-        # --- KORREKTUR HIER: 'file' statt 'path' ---
+        # KI-Upload
         sample_file = client.files.upload(file="temp.pdf")
-        
         while sample_file.state.name == "PROCESSING":
             time.sleep(2)
             sample_file = client.files.get(name=sample_file.name)
@@ -80,17 +79,31 @@ def process_files():
         Kategorien: Gehalt, Versicherung, Steuern, Wohnung, Gesundheit, Sonstiges.
         """
         
-        # --- KORREKTUR HIER: Modellname ohne 'models/' Präfix ---
-        response = client.models.generate_content(
-            model='gemini-2.0-flash', 
-            contents=[sample_file, prompt]
-        )
+        # KI-Anfrage mit Retry-Logik für 429 Fehler
+        response = None
+        for i in range(3): # Maximal 3 Versuche
+            try:
+                response = client.models.generate_content(
+                    model='gemini-flash-latest', # STABILERES MODELL FÜR FREE TIER
+                    contents=[sample_file, prompt]
+                )
+                break
+            except Exception as e:
+                if "429" in str(e):
+                    print(f"⏳ Quota voll. Warte 60 Sekunden (Versuch {i+1}/3)...")
+                    time.sleep(60)
+                else:
+                    raise e
+
+        if not response:
+            print(f"❌ Überspringe {filename} wegen Quota-Fehler.")
+            continue
 
         try:
             clean_json = response.text.replace('```json', '').replace('```', '').strip()
             instructions = json.loads(clean_json)
         except Exception as e:
-            print(f"❌ Fehler beim Lesen der KI-Antwort: {e}")
+            print(f"❌ Fehler beim Parsen: {e}")
             continue
 
         reader = pypdf.PdfReader("temp.pdf")
@@ -116,10 +129,13 @@ def process_files():
             print(f"   ✅ Archiviert: {doc['folder']}/{doc['filename']}.pdf")
             os.remove(split_filename)
 
+        # Original löschen
         drive_service.files().delete(fileId=file_id).execute()
         print(f"🏁 {filename} erledigt.")
         os.remove("temp.pdf")
-        time.sleep(15)
+        
+        print("Warte 30 Sek. für die nächste Datei...")
+        time.sleep(30)
 
 if __name__ == "__main__":
     process_files()
